@@ -16,10 +16,10 @@ target osc_ffi.o pkg : FilePath := do
   let srcJob ← inputTextFile <| pkg.dir / "ffi" / "osc_ffi.c"
   let weakArgs := #["-I", (← getLeanIncludeDir).toString]
   let pic := if Platform.isWindows then #[] else #["-fPIC"]
-  -- `leanc`'s bundled clang has no system-header search path, so use a real
-  -- compiler: `cc` on Linux/macOS, the runner's `clang` (Windows SDK headers,
-  -- incl. winsock2.h) on Windows.
-  let compiler := if Platform.isWindows then "clang" else "cc"
+  -- Lean's bundled clang is freestanding (no libc/builtin headers), so use a
+  -- self-contained system compiler: `cc` on Linux/macOS, MinGW `gcc` on Windows
+  -- (has stdbool/string/winsock2 headers and matches Lean's MinGW ABI).
+  let compiler := if Platform.isWindows then "gcc" else "cc"
   buildO oFile srcJob weakArgs pic compiler getLeanTrace
 
 extern_lib libosc_ffi pkg := do
