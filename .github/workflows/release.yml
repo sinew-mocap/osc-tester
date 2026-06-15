@@ -41,8 +41,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p out
-          bin=$(find .lake/build/bin -maxdepth 1 -type f -name 'osctest*' | head -n1)
-          test -n "$bin" || { echo "osctest binary not found under .lake/build/bin"; ls -R .lake/build/bin || true; exit 1; }
+          # Exact name only — a glob also matches Lake sidecars (osctest.trace, *.export).
+          bin=$(find .lake/build/bin -maxdepth 1 -type f \( -name osctest -o -name osctest.exe \) | head -n1)
+          test -n "$bin" || { echo "osctest binary not found under .lake/build/bin"; ls -la .lake/build/bin || true; exit 1; }
           cp "$bin" "out/${{ matrix.asset }}"
 
       - uses: softprops/action-gh-release@v2
