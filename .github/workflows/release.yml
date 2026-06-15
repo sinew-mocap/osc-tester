@@ -51,3 +51,6 @@ jobs:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: out/${{ matrix.asset }}
           fail_on_unmatched_files: true
+          # Any tag with a pre-release suffix (-dev.N / -rc.N / -beta.N) is a
+          # prerelease; clean vX.Y.Z tags are full releases.
+          prerelease: ${{ contains(github.event.inputs.tag || github.ref_name, '-') }}
