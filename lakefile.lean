@@ -5,7 +5,14 @@ package «osc-tester» where
   -- release-ish build flags
   leanOptions := #[⟨`autoImplicit, false⟩]
 
+require plausible from git
+  "https://github.com/leanprover-community/plausible" @ "v4.30.0"
+
 lean_lib Osc where
+
+@[test_driver]
+lean_exe test where
+  root := `Test
 
 /-- Compile the C FFI to an object file. -/
 target osc_ffi.o pkg : FilePath := do
