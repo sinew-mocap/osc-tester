@@ -1,14 +1,27 @@
 // Minimal C FFI for the Lean OSC tester: float32 bit-pattern, float parsing, and
 // a one-shot UDP datagram send.  Lean 4 has no sockets and only Float64, so these
-// three primitives are all the native code the tester needs.
+// three primitives are all the native code the tester needs.  Portable across
+// Linux/macOS (BSD sockets) and Windows (Winsock2).
 #include <lean/lean.h>
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+
+#ifdef _WIN32
+#  include <winsock2.h>
+#  include <ws2tcpip.h>
+#  define CLOSESOCK closesocket
+#else
+#  include <sys/socket.h>
+#  include <netinet/in.h>
+#  include <arpa/inet.h>
+#  include <unistd.h>
+#  define CLOSESOCK close
+#endif
+
+static lean_obj_res osc_err(const char *msg) {
+    return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(msg)));
+}
 
 // Float64 -> the raw 32-bit IEEE-754 pattern of the nearest Float32 (OSC 'f').
 uint32_t lean_osc_float32_bits(double d) {
@@ -31,23 +44,40 @@ lean_obj_res lean_osc_udp_send(b_lean_obj_arg host, uint32_t port,
     size_t len = lean_sarray_size(data);
     const uint8_t *buf = lean_sarray_cptr(data);
 
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0)
-        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("socket() failed")));
+#ifdef _WIN32
+    WSADATA wsa;
+    if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
+        return osc_err("WSAStartup failed");
+#endif
+
+    int fd = (int)socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return osc_err("socket() failed");
+    }
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_port = htons((uint16_t)port);
     if (inet_pton(AF_INET, h, &addr.sin_addr) != 1) {
-        close(fd);
-        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad host address")));
+        CLOSESOCK(fd);
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return osc_err("bad host address");
     }
 
-    ssize_t n = sendto(fd, buf, len, 0, (struct sockaddr *)&addr, sizeof(addr));
-    close(fd);
-    if (n != (ssize_t)len)
-        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("sendto() failed")));
+    long n = (long)sendto(fd, (const char *)buf, (int)len, 0,
+                          (struct sockaddr *)&addr, sizeof(addr));
+    CLOSESOCK(fd);
+#ifdef _WIN32
+    WSACleanup();
+#endif
+    if (n != (long)len)
+        return osc_err("sendto() failed");
 
     return lean_io_result_mk_ok(lean_box(0));
 }
